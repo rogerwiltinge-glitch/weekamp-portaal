@@ -1363,24 +1363,30 @@ function checkURLParams(){
 
 // BULK PRINT ALLE BRIEVEN
 async function printAllBrieven(type){
-  const projId=type==='in'?document.getElementById('bi-proj').value:document.getElementById('bm-proj').value;
+  const projId=type==='in'
+    ?document.getElementById('bi-proj').value
+    :document.getElementById('bm-proj').value;
   if(!projId){toast('Selecteer eerst een project.','e');return;}
   const proj=DB.projects[projId];
   if(!proj||!proj.bewoners.length){toast('Geen bewoners gevonden.','e');return;}
   const dat=document.getElementById(type==='in'?'bi-dat':'bm-dat')?.value||'';
   const van=document.getElementById(type==='in'?'bi-van':'bm-van')?.value||(type==='in'?'09:00':'08:00');
   const tot=document.getElementById(type==='in'?'bi-tot':'bm-tot')?.value||(type==='in'?'12:00':'17:00');
-  const datFmt=dat?new Date(dat).toLocaleDateString('nl-NL',{weekday:'long',year:'numeric',month:'long',day:'numeric'}):'[datum invullen]';
+  const datFmt=dat
+    ?new Date(dat).toLocaleDateString('nl-NL',{weekday:'long',year:'numeric',month:'long',day:'numeric'})
+    :'[datum invullen]';
   const s=DB.settings;
   const isIn=type==='in';
-  toast('Word document wordt gegenereerd...','i');
+
+  toast('Word document wordt aangemaakt...','i');
 
   const {Document,Packer,Paragraph,TextRun,Table,TableRow,TableCell,
     ImageRun,AlignmentType,BorderStyle,WidthType,VerticalAlign,
-    PageBreak,TableLayoutType} = docx;
+    PageBreak,TableLayoutType}=docx;
 
-  const B=(t,sz=20)=>new TextRun({text:t,bold:true,size:sz,font:'Calibri'});
-  const N=(t,sz=20)=>new TextRun({text:t,size:sz,font:'Calibri'});
+  // Helpers
+  const B=(t,sz=20)=>new TextRun({text:String(t||''),bold:true,size:sz,font:'Calibri'});
+  const N=(t,sz=20)=>new TextRun({text:String(t||''),bold:false,size:sz,font:'Calibri'});
   const br=()=>new Paragraph({children:[N('')],spacing:{before:0,after:0}});
   const P=(runs,opts={})=>new Paragraph({children:Array.isArray(runs)?runs:[runs],spacing:{before:0,after:100},...opts});
   const NB={
@@ -1400,66 +1406,78 @@ async function printAllBrieven(type){
     const isLast=i===proj.bewoners.length-1;
     const email=isIn?s.email:'planningwmt@weekampdeuren.nl';
 
-    // QR genereren
+    // QR genereren als afbeelding
     const qrUrl=makeQRData_bew(projId,b,type);
     const qrDataUrl=await genQR(qrUrl,90);
     let qrContent;
     if(qrDataUrl){
-      const res=await fetch(qrDataUrl);
-      const blob=await res.blob();
-      const buf=await blob.arrayBuffer();
-      qrContent=new ImageRun({data:buf,type:'png',transformation:{width:65,height:65}});
-    } else {
-      qrContent=N('[QR]',16);
+      try{
+        const res=await fetch(qrDataUrl);
+        const blob=await res.blob();
+        const buf=await blob.arrayBuffer();
+        qrContent=new ImageRun({data:buf,type:'png',transformation:{width:65,height:65}});
+      }catch(e){qrContent=N('[QR-code]',18);}
+    }else{
+      qrContent=N('[QR-code]',18);
     }
 
     // Detail tabel
     const rows=isIn?[
       ['Meetdatum :',datFmt],
-      ['Tijdstip :','tussen '+van+' – '+tot+' uur'],
+      ['Tijdstip :','tussen '+van+' \u2013 '+tot+' uur'],
       ['Duur :','ca. 15-20 minuten'],
       ['Referentie :',projId],
       ['Projectleider :',proj.pl],
     ]:[
       ['Datum uitvoering :',datFmt],
-      ['Verwachte aankomst :','tussen '+van+' – '+tot+' uur'],
+      ['Verwachte aankomst :','tussen '+van+' \u2013 '+tot+' uur'],
       ['Referentie :',projId],
       ['Projectleider :',proj.pl],
     ];
-    const colW=isIn?[2700,5800]:[3000,5500];
+    const cw=isIn?[2700,5800]:[3000,5500];
     const detailTable=new Table({
-      width:{size:8500,type:WidthType.DXA},columnWidths:colW,
+      width:{size:8500,type:WidthType.DXA},columnWidths:cw,
       layout:TableLayoutType.FIXED,borders:NB,
       rows:rows.map(([lbl,val])=>new TableRow({children:[
-        new TableCell({...CS,width:{size:colW[0],type:WidthType.DXA},children:[P(B(lbl))]}),
-        new TableCell({...CS,width:{size:colW[1],type:WidthType.DXA},children:[P(B(val))]}),
+        new TableCell({...CS,width:{size:cw[0],type:WidthType.DXA},children:[P(B(lbl))]}),
+        new TableCell({...CS,width:{size:cw[1],type:WidthType.DXA},children:[P(B(val))]}),
       ]}))
     });
 
     // QR tabel
-    const contactTxt=isIn?'Contact: '+s.tel:'E-mail: planningwmt@weekampdeuren.nl (ovv ref + adres)';
+    const contactTxt=isIn
+      ?'Contact: '+s.tel
+      :'E-mail: planningwmt@weekampdeuren.nl (ovv ref + adres)';
     const qrTable=new Table({
       width:{size:8500,type:WidthType.DXA},columnWidths:[1200,7300],
       layout:TableLayoutType.FIXED,borders:NB,
       rows:[new TableRow({children:[
-        new TableCell({...CS,width:{size:1200,type:WidthType.DXA},verticalAlign:VerticalAlign.CENTER,
+        new TableCell({...CS,width:{size:1200,type:WidthType.DXA},
+          verticalAlign:VerticalAlign.CENTER,
           children:[new Paragraph({children:[qrContent]})]}),
-        new TableCell({...CS,width:{size:7300,type:WidthType.DXA},verticalAlign:VerticalAlign.CENTER,
-          children:[P([B('Scan deze QR-code ',18),N('om de afspraak te bevestigen of geef aan dat u niet aanwezig kunt zijn. '+contactTxt,18)])]}),
+        new TableCell({...CS,width:{size:7300,type:WidthType.DXA},
+          verticalAlign:VerticalAlign.CENTER,
+          children:[P([B('Scan deze QR-code ',18),
+            N('om de afspraak te bevestigen of geef aan dat u niet aanwezig kunt zijn. '+contactTxt,18)])]}),
       ]})]
     });
 
     // Briefinhoud
     const body=isIn?[
-      P([N('In opdracht van '),B(proj.corp),N(' gaat '),B('Weekamp Deuren B.V.'),N(' de draaiende delen in uw woning '),B('inmeten'),N('. Voordat wij gaan produceren is het noodzakelijk dat wij de element(en) eerst nauwkeurig opmeten. Dit opmeten staat gepland voor:')]),
+      P([N('In opdracht van '),B(proj.corp),N(' gaat '),B('Weekamp Deuren B.V.'),
+         N(' de draaiende delen in uw woning '),B('inmeten'),
+         N('. Voordat wij gaan produceren is het noodzakelijk dat wij de element(en) eerst nauwkeurig opmeten. Dit opmeten staat gepland voor:')]),
       br(),detailTable,br(),
-      P([N('Wij verzoeken u vriendelijk om op de bovengenoemde datum '),B('gedurende het gehele aangegeven tijdstip'),N(' aanwezig te zijn of een regeling te treffen, zodat wij de opmeetwerkzaamheden kunnen uitvoeren. Tevens vragen we u ervoor te zorgen dat de elementen aan de binnenzijde in de woning goed bereikbaar zijn.')]),
+      P([N('Wij verzoeken u vriendelijk om op de bovengenoemde datum '),
+         B('gedurende het gehele aangegeven tijdstip'),
+         N(' aanwezig te zijn of een regeling te treffen, zodat wij de opmeetwerkzaamheden kunnen uitvoeren. Tevens vragen we u ervoor te zorgen dat de elementen aan de binnenzijde in de woning goed bereikbaar zijn.')]),
       br(),
       P(N('Door onvoorziene omstandigheden kan het zijn dat een planning uitloopt of niet gehaald wordt. U kunt er echter op rekenen dat de inmeter op de aangegeven dag bij u komt.')),
       br(),
-      P(N('Mocht het qua tijdstip tot problemen leiden of kunt u beslist niet aanwezig zijn èn geen regeling treffen, gelieve dan tijdens kantooruren contact op te nemen met de inmeter. Het is mogelijk dat u niet direct contact krijgt, gelieve dan de voicemail in te spreken onder vermelding van uw adres en woonplaats, u wordt dan zo spoedig mogelijk teruggebeld.')),
+      P(N('Mocht het qua tijdstip tot problemen leiden of kunt u beslist niet aanwezig zijn \u00e8n geen regeling treffen, gelieve dan tijdens kantooruren contact op te nemen met de inmeter. Het is mogelijk dat u niet direct contact krijgt, gelieve dan de voicemail in te spreken onder vermelding van uw adres en woonplaats, u wordt dan zo spoedig mogelijk teruggebeld.')),
     ]:[
-      P([N('In opdracht van '),B(proj.corp),N(' gaat '),B('Weekamp Deuren B.V.'),N(' de draaiende delen in uw woning vervangen.')]),
+      P([N('In opdracht van '),B(proj.corp),N(' gaat '),B('Weekamp Deuren B.V.'),
+         N(' de draaiende delen in uw woning vervangen.')]),
       br(),P(N('De uitvoering staat gepland voor:')),br(),detailTable,br(),
       P(N('Door onvoorziene omstandigheden kan het zijn dat een planning in of uitloopt en niet gehaald wordt. U kunt er echter op rekenen dat de monteurs op de aangegeven dag bij u komen.')),
       br(),
@@ -1467,7 +1485,8 @@ async function printAllBrieven(type){
       br(),
       P(N('Om schade aan uw eigendommen te voorkomen, vragen wij u om rond het te vervangen element 1,5 meter te ontruimen en eventuele eigendommen zoals gordijnroeden, naamplaatjes, etc te verwijderen.')),
       br(),
-      P([N('Voor meer informatie en/of vragen: stuur een e-mail (ovv de referentie en uw adres) naar: '),B('planningwmt@weekampdeuren.nl')]),
+      P([N('Voor meer informatie en/of vragen: stuur een e-mail (ovv de referentie en uw adres) naar: '),
+         B('planningwmt@weekampdeuren.nl')]),
     ];
 
     const signing=isIn
@@ -1475,7 +1494,7 @@ async function printAllBrieven(type){
       :[P(B('Weekamp Montage Team')),P([B(proj.pl),N(', projectleider.')])];
 
     const letter=[
-      P(B('Weekamp Deuren B.V.',26)),
+      P(B('Weekamp Deuren',26)),
       new Paragraph({
         children:[N(s.str+', '+s.pc+'  |  T: '+s.tel+'  |  '+email,17)],
         border:{bottom:{style:BorderStyle.SINGLE,size:8,color:'1565C0',space:1}},
@@ -1486,7 +1505,11 @@ async function printAllBrieven(type){
       P(N(b.adres+' '+b.hnr)),
       P(N(b.pc+' '+b.plaats)),
       br(),
-      new Paragraph({children:[N('Dedemsvaart, '+new Date().toLocaleDateString('nl-NL'))],alignment:AlignmentType.RIGHT,spacing:{before:0,after:160}}),
+      new Paragraph({
+        children:[N('Dedemsvaart, '+new Date().toLocaleDateString('nl-NL'))],
+        alignment:AlignmentType.RIGHT,
+        spacing:{before:0,after:160}
+      }),
       br(),
       P(N('Geachte bewoner,')),
       br(),
@@ -1509,7 +1532,10 @@ async function printAllBrieven(type){
   const doc=new Document({
     styles:{default:{document:{run:{font:'Calibri',size:20}}}},
     sections:[{
-      properties:{page:{size:{width:11906,height:16838},margin:{top:1134,right:1134,bottom:1134,left:1134}}},
+      properties:{page:{
+        size:{width:11906,height:16838},
+        margin:{top:1134,right:1134,bottom:1134,left:1134}
+      }},
       children:allChildren
     }]
   });
@@ -1522,9 +1548,8 @@ async function printAllBrieven(type){
   a.download='Weekamp_'+(isIn?'Inmetbrieven':'Montagebrieven')+'_'+projId+'.docx';
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  toast(proj.bewoners.length+' brieven gedownload als Word','s');
+  setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
+  toast('✅ Word-bestand gedownload — opent automatisch in Word','s');
 }
 
 function genQR(text,size){
