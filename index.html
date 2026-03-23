@@ -1310,12 +1310,12 @@ function bewConfirm(pnr,bewId,type,yes){
 
 // QR URLs
 function makeQRData_proj(pnr){
-  return 'https://testwk.netlify.app/?proj='+encodeURIComponent(pnr);
+  return 'https://weekamp-portaal.vercel.app/?proj='+encodeURIComponent(pnr);
 }
 function makeQRData_bew(pnr,b,type){
   // Sleutel: naam|adres|hnr|plaats|pnr — uniek per project+adres
   const key=[b.naam||'',b.adres||'',b.hnr||'',b.plaats||'',pnr].join('|');
-  return 'https://testwk.netlify.app/?bew='+encodeURIComponent(key)+'&t='+encodeURIComponent(type);
+  return 'https://weekamp-portaal.vercel.app/?bew='+encodeURIComponent(key)+'&t='+encodeURIComponent(type);
 }
 
 // URL routing voor QR scans
